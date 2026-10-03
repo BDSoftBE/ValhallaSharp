@@ -99,7 +99,15 @@ Push a version tag such as `v1.2.3` or `v1.2.3-beta.1` to trigger
 `.github/workflows/publish-nuget.yml`. The workflow builds and smoke-tests the
 Windows x64 native DLL, uses `dotnetCampus.TagToVersion` to update
 `build/Version.props`, packs `Valhalla.Bindings`, verifies the DLL is included,
-and publishes to NuGet.org with the repository secret `NUGET_API_KEY`.
+and publishes to NuGet.org using OIDC trusted publishing through `NuGet/login`.
+Set the repository Actions variable `NUGET_USER` to your NuGet profile username
+(not your email address); a secret named `NUGET_USER` is also supported.
+No stored `NUGET_API_KEY` secret is needed. The publish job obtains a temporary
+key immediately before pushing the package.
+Your NuGet trusted publishing policy must match this repository and the workflow
+filename `publish-nuget.yml`. This workflow does not use a GitHub environment,
+so leave the policy's environment blank; if your policy specifies one, add the
+matching `environment` to the publish job.
 The generated version change stays in the workflow checkout. Local builds default
 to the version committed in `build/Version.props`.
 

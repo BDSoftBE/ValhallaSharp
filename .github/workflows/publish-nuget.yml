@@ -144,6 +144,9 @@ jobs:
     needs: package
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/setup-dotnet@v5
         with:
@@ -154,5 +157,13 @@ jobs:
           name: nuget-package
           path: packages
 
+      - name: Log in to NuGet using trusted publishing
+        uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: ${{ vars.NUGET_USER || secrets.NUGET_USER }}
+
       - name: Push NuGet package
-        run: dotnet nuget push "packages/*.nupkg" --source https://api.nuget.org/v3/index.json --skip-duplicate
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push "packages/*.nupkg" --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY" --skip-duplicate
