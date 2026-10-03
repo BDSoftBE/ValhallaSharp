@@ -35,6 +35,28 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Read vcpkg baseline
+        id: vcpkg-baseline
+        run: |
+          $manifest = Get-Content src/Valhalla.Native/vcpkg.json -Raw | ConvertFrom-Json
+          $baseline = $manifest.'builtin-baseline'
+          if ($baseline -notmatch '^[0-9a-f]{40}$') { throw 'Invalid vcpkg baseline commit.' }
+          "commit=$baseline" >> $env:GITHUB_OUTPUT
+
+      # The runner's preinstalled checkout may not contain the pinned baseline.
+      - name: Check out pinned vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: ${{ steps.vcpkg-baseline.outputs.commit }}
+          path: artifacts/vcpkg-tool
+          persist-credentials: false
+
+      - name: Bootstrap vcpkg
+        run: |
+          & ./artifacts/vcpkg-tool/bootstrap-vcpkg.bat -disableMetrics
+          if ($LASTEXITCODE -ne 0) { throw 'vcpkg bootstrap failed.' }
+
       - name: Create dependency cache directory
         run: New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
 
@@ -45,7 +67,7 @@ jobs:
           key: vcpkg-${{ matrix.os }}-${{ matrix.rid }}-${{ hashFiles('src/Valhalla.Native/vcpkg.json') }}
 
       - name: Build Windows native library
-        run: ./build.ps1 -Configuration Release -VcpkgRoot $env:VCPKG_INSTALLATION_ROOT
+        run: ./build.ps1 -Configuration Release -VcpkgRoot (Join-Path $env:GITHUB_WORKSPACE 'artifacts/vcpkg-tool')
 
       - name: Run native smoke tests
         run: dotnet run --project tests/Valhalla.Bindings.SmokeTests -c Release -p:BuildNative=false --no-build -- --native
