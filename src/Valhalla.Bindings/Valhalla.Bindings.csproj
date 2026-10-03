@@ -16,8 +16,10 @@
   </PropertyGroup>
   <Target Name="BuildValhallaNative" BeforeTargets="PrepareForBuild" Condition="'$(BuildNative)' == 'true'">
     <Error Condition="'$(NativeRuntimeIdentifier)' != 'win-x64'" Text="The native build currently supports win-x64. Set BuildNative=false to build only the managed library." />
-    <Exec Command="&quot;$(CMakeExecutable)&quot; -S &quot;$(MSBuildProjectDirectory)/../Valhalla.Native&quot; -B &quot;$(NativeBuildDir)&quot; -A x64 -DCMAKE_BUILD_TYPE=$(Configuration) -DVALHALLASHARP_OUTPUT_DIR=&quot;$(NativeOutputDir)&quot; $(NativeToolchainArgument) $(NativeSourceArgument) $(NativeCMakeArguments)" />
-    <Exec Command="&quot;$(CMakeExecutable)&quot; --build &quot;$(NativeBuildDir)&quot; --config $(Configuration) --target valhalla_sharp --parallel" />
+    <!-- vcpkg can print errors for failed mirrors and then succeed using a fallback.
+         Trust CMake's exit code rather than MSBuild's diagnostic text matching. -->
+    <Exec IgnoreStandardErrorWarningFormat="true" Command="&quot;$(CMakeExecutable)&quot; -S &quot;$(MSBuildProjectDirectory)/../Valhalla.Native&quot; -B &quot;$(NativeBuildDir)&quot; -A x64 -DCMAKE_BUILD_TYPE=$(Configuration) -DVALHALLASHARP_OUTPUT_DIR=&quot;$(NativeOutputDir)&quot; $(NativeToolchainArgument) $(NativeSourceArgument) $(NativeCMakeArguments)" />
+    <Exec IgnoreStandardErrorWarningFormat="true" Command="&quot;$(CMakeExecutable)&quot; --build &quot;$(NativeBuildDir)&quot; --config $(Configuration) --target valhalla_sharp --parallel" />
   </Target>
   <Target Name="IncludeValhallaNative" BeforeTargets="AssignTargetPaths" DependsOnTargets="BuildValhallaNative">
     <ItemGroup>
