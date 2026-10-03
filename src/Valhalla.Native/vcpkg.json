@@ -1,0 +1,11 @@
+{
+  "name": "valhalla-sharp-native",
+  "version-string": "0.1.0",
+  "builtin-baseline": "3cbc1db4d867ec83c89fba4c461321c11f78b5e3",
+  "dependencies": [
+    "boost-algorithm", "boost-container", "boost-functional", "boost-geometry",
+    "boost-heap", "boost-headers", "boost-lexical-cast", "boost-optional",
+    "boost-property-tree", "boost-range", "boost-serialization", "boost-smart-ptr",
+    "boost-tokenizer", "boost-variant", "protobuf", "zlib", "pkgconf"
+  ]
+}

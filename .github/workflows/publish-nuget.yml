@@ -1,0 +1,138 @@
+name: Publish NuGet
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuget-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-native:
+    name: Build native (${{ matrix.rid }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            rid: win-x64
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/artifacts/vcpkg-cache
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Create dependency cache directory
+        run: New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+
+      - name: Cache native dependencies
+        uses: actions/cache@v4
+        with:
+          path: artifacts/vcpkg-cache
+          key: vcpkg-${{ matrix.os }}-${{ matrix.rid }}-${{ hashFiles('src/Valhalla.Native/vcpkg.json') }}
+
+      - name: Build Windows native library
+        run: ./build.ps1 -Configuration Release -VcpkgRoot $env:VCPKG_INSTALLATION_ROOT
+
+      - name: Run native smoke tests
+        run: dotnet run --project tests/Valhalla.Bindings.SmokeTests -c Release -p:BuildNative=false --no-build -- --native
+
+      - name: Upload native library
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.rid }}
+          path: artifacts/native/${{ matrix.rid }}/Release/*.dll
+          if-no-files-found: error
+
+  package:
+    name: Create NuGet package
+    needs: build-native
+    runs-on: windows-2022
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      # TagToVersion targets an older .NET runtime; run it on the installed SDK runtime.
+      DOTNET_ROLL_FORWARD: LatestMajor
+      RELEASE_TAG: ${{ github.ref }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install dotnet tool
+        run: dotnet tool install -g dotnetCampus.TagToVersion
+
+      - name: Set tag to version
+        run: |
+          dotnet TagToVersion -t "$env:RELEASE_TAG"
+          if ($LASTEXITCODE -ne 0) { throw 'TagToVersion failed.' }
+          $expectedVersion = $env:RELEASE_TAG -replace '^refs/tags/', '' -replace '^v', ''
+          [xml]$versionProps = Get-Content build/Version.props -Raw
+          if ($versionProps.Project.PropertyGroup.Version -ne $expectedVersion) {
+            throw 'TagToVersion did not produce the version requested by the tag.'
+          }
+
+      - name: Download Windows native library
+        uses: actions/download-artifact@v4
+        with:
+          name: native-win-x64
+          path: artifacts/native/win-x64/Release
+
+      - name: Pack bindings with native library
+        run: dotnet pack src/Valhalla.Bindings/Valhalla.Bindings.csproj -c Release -p:BuildNative=false -o artifacts/packages
+
+      - name: Verify package contains native library
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $packages = @(Get-ChildItem artifacts/packages -Filter '*.nupkg')
+          if ($packages.Count -ne 1) { throw 'Expected exactly one NuGet package.' }
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($packages[0].FullName)
+          try {
+            if (!$archive.GetEntry('runtimes/win-x64/native/valhalla_sharp.dll')) {
+              throw 'The NuGet package is missing the Windows native DLL.'
+            }
+          } finally { $archive.Dispose() }
+
+      - name: Upload NuGet package
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-package
+          path: artifacts/packages/*.nupkg
+          if-no-files-found: error
+
+  publish:
+    name: Publish to NuGet.org
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: nuget-package
+          path: packages
+
+      - name: Push NuGet package
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: dotnet nuget push "packages/*.nupkg" --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY" --skip-duplicate

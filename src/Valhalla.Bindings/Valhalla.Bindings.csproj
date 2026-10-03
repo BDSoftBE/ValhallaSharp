@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <BuildNative Condition="'$(BuildNative)' == ''">true</BuildNative>
+    <NativeRuntimeIdentifier Condition="'$(NativeRuntimeIdentifier)' == ''">win-x64</NativeRuntimeIdentifier>
+    <NativeOutputDir>$(MSBuildProjectDirectory)/../../artifacts/native/$(NativeRuntimeIdentifier)/$(Configuration)</NativeOutputDir>
+    <NativeBuildDir>$(MSBuildProjectDirectory)/../../artifacts/cmake/$(NativeRuntimeIdentifier)/$(Configuration)</NativeBuildDir>
+    <CMakeExecutable Condition="'$(CMakeExecutable)' == ''">cmake</CMakeExecutable>
+    <NativeToolchainArgument Condition="'$(NativeToolchainFile)' != ''">-DCMAKE_TOOLCHAIN_FILE=&quot;$(NativeToolchainFile)&quot; -DVCPKG_TARGET_TRIPLET=x64-windows-static-md</NativeToolchainArgument>
+    <NativeSourceArgument Condition="'$(NativeValhallaSource)' != ''">-DVALHALLA_SOURCE_DIR_OVERRIDE=&quot;$(NativeValhallaSource)&quot;</NativeSourceArgument>
+  </PropertyGroup>
+  <Target Name="BuildValhallaNative" BeforeTargets="PrepareForBuild" Condition="'$(BuildNative)' == 'true'">
+    <Error Condition="'$(NativeRuntimeIdentifier)' != 'win-x64'" Text="The native build currently supports win-x64. Set BuildNative=false to build only the managed library." />
+    <Exec Command="&quot;$(CMakeExecutable)&quot; -S &quot;$(MSBuildProjectDirectory)/../Valhalla.Native&quot; -B &quot;$(NativeBuildDir)&quot; -A x64 -DCMAKE_BUILD_TYPE=$(Configuration) -DVALHALLASHARP_OUTPUT_DIR=&quot;$(NativeOutputDir)&quot; $(NativeToolchainArgument) $(NativeSourceArgument) $(NativeCMakeArguments)" />
+    <Exec Command="&quot;$(CMakeExecutable)&quot; --build &quot;$(NativeBuildDir)&quot; --config $(Configuration) --target valhalla_sharp --parallel" />
+  </Target>
+  <Target Name="IncludeValhallaNative" BeforeTargets="AssignTargetPaths" DependsOnTargets="BuildValhallaNative">
+    <ItemGroup>
+      <Content Include="$(NativeOutputDir)/*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Pack="true" PackagePath="runtimes/$(NativeRuntimeIdentifier)/native/" />
+    </ItemGroup>
+  </Target>
+</Project>
