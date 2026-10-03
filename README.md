@@ -70,6 +70,35 @@ optional extract override resolves relative to the application's working directo
 You can also pass full configuration JSON to `new ValhallaActor(json)`; paths then
 follow Valhalla's normal working-directory rules.
 
+For typed routing, use `ValhallaRoutingEngine` with two `GeoCoordinates` records
+(latitude, longitude in WGS84 decimal degrees):
+
+```csharp
+using var engine = ValhallaRoutingEngine.FromConfigurationFile("data/valhalla.json");
+RouteResponse route = engine.CalculateRoute(
+    new GeoCoordinates(50.8503, 4.3517),
+    new GeoCoordinates(51.2194, 4.4025),
+    new RouteOptions { Costing = "auto", Units = "kilometers", Language = "en-US" });
+
+Console.WriteLine($"{route.Trip.Summary.Length} km in {route.Trip.Summary.Time} seconds");
+foreach (var maneuver in route.Trip.Legs[0].Maneuvers)
+    Console.WriteLine(maneuver.Instruction);
+```
+
+The options argument is optional and defaults to the values shown. The response
+includes trip and leg summaries, locations, maneuver instructions and geometry
+indexes, signs, lanes, transit details, warnings, and any returned alternates.
+Leg `Shape` contains encoded polyline6 geometry. Times are seconds; lengths use
+`route.Trip.Units`. Every response model preserves unrecognized fields in
+`AdditionalData`, and `route.RawJson` retains the complete original response.
+`RouteResponse.FromJson` can also parse saved native route responses.
+
+The engine owns actors created from JSON or a configuration file. To reuse an
+existing actor, call `new ValhallaRoutingEngine(actor)`; disposing this wrapper
+leaves the actor open. Pass `leaveOpen: false` to transfer disposal ownership.
+Coordinates are checked for finite values and valid latitude/longitude ranges
+before routing. Native routing failures propagate as `ValhallaException`.
+
 Route, locate, matrix, optimized route, isochrone, trace route, trace attributes,
 and status accept Valhalla's JSON request schemas and return its text response.
 Protobuf output is unsupported. Failures throw `ValhallaException`; malformed
